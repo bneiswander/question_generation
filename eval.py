@@ -39,35 +39,52 @@ experiment_path = "output/{}".format(config.exp)
 
 # Preprocess the data
 dp = DataPreprocessor()
-_, _, vocabs = dp.load_data(os.path.join(config.out_dir, "train-dataset.pt"),
-                            os.path.join(config.out_dir, "dev-dataset.pt"),
-                            config.glove)
+_, _, vocabs = dp.load_data(
+    os.path.join(config.out_dir, "train-dataset.pt"),
+    os.path.join(config.out_dir, "dev-dataset.pt"),
+    config.glove,
+)
 
 # Load the data into datasets of mini-batches
 ext = "sentence" if not config.paragraph else "context"
-test_dataset = dp.generate_data(os.path.join(config.out_dir, "dev"), ext,
-                                "question", max_len=prepro_params["max_len_context"])
+test_dataset = dp.generate_data(
+    os.path.join(config.out_dir, "dev"),
+    ext,
+    "question",
+    max_len=prepro_params["max_len_context"],
+)
 
-test_dataloader = data.BucketIterator(test_dataset,
-                                      batch_size=hyper_params["eval_batch_size"],
-                                      sort_key=lambda x: len(x.sentence),
-                                      shuffle=False)
+test_dataloader = data.BucketIterator(
+    test_dataset,
+    batch_size=hyper_params["eval_batch_size"],
+    sort_key=lambda x: len(x.sentence),
+    device=device,
+    shuffle=False,
+)
 
 # Load the model
-model = Seq2Seq(in_vocab=vocabs["src_vocab"],
-                hidden_size=hyper_params["hidden_size"],
-                n_layers=hyper_params["n_layers"],
-                trg_vocab=vocabs['trg_vocab'],
-                device=device,
-                drop_prob=hyper_params["drop_prob"],
-                use_answer=hyper_params["use_answer"])
+model = Seq2Seq(
+    in_vocab=vocabs["src_vocab"],
+    hidden_size=hyper_params["hidden_size"],
+    n_layers=hyper_params["n_layers"],
+    trg_vocab=vocabs["trg_vocab"],
+    device=device,
+    drop_prob=hyper_params["drop_prob"],
+    use_answer=hyper_params["use_answer"],
+)
 
 # Load the model weights resulting from training
 if not hyper_params["cuda"]:
-    model.load_state_dict(torch.load(os.path.join(experiment_path, "model.pkl"),
-                                     map_location=lambda storage, loc: storage)["state_dict"])
+    model.load_state_dict(
+        torch.load(
+            os.path.join(experiment_path, "model.pkl"),
+            map_location=lambda storage, loc: storage,
+        )["state_dict"]
+    )
 else:
-    model.load_state_dict(torch.load(os.path.join(experiment_path, "model.pkl"))["state_dict"])
+    model.load_state_dict(
+        torch.load(os.path.join(experiment_path, "model.pkl"))["state_dict"]
+    )
 model.to(device)
 
 # Enter evaluation loop
