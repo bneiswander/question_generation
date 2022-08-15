@@ -1,19 +1,24 @@
+import operator
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-import operator
 
-from utils import sample_sequence, BeamSearchNode, Beam
 import config
+from utils import Beam, BeamSearchNode, sample_sequence
 
 
 class Embedding(nn.Module):
     def __init__(self, word_vectors, padding_idx, drop_prob):
         super(Embedding, self).__init__()
         self.drop_prob = drop_prob
-        self.w_embed = nn.Embedding.from_pretrained(word_vectors, padding_idx=padding_idx, freeze=False)
-        self.f_embed = nn.Embedding(4, config.answer_embedding_size, padding_idx=padding_idx)
+        self.w_embed = nn.Embedding.from_pretrained(
+            word_vectors, padding_idx=padding_idx, freeze=False
+        )
+        self.f_embed = nn.Embedding(
+            4, config.answer_embedding_size, padding_idx=padding_idx
+        )
 
     def forward(self, x, y=None):
         emb = self.w_embed(x)
@@ -26,13 +31,15 @@ class Embedding(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self,
-                 input_size,
-                 hidden_size,
-                 num_layers,
-                 word_vectors,
-                 bidirectional,
-                 drop_prob=0.):
+    def __init__(
+        self,
+        input_size,
+        hidden_size,
+        num_layers,
+        word_vectors,
+        bidirectional,
+        drop_prob=0.0,
+    ):
         super(Encoder, self).__init__()
 
         num_directions = 2 if bidirectional else 1
@@ -40,10 +47,14 @@ class Encoder(nn.Module):
 
         self.embedding = Embedding(word_vectors, padding_idx=1, drop_prob=drop_prob)
         self.drop_prob = drop_prob
-        self.rnn = nn.LSTM(input_size, hidden_size, num_layers,
-                           batch_first=True,
-                           bidirectional=bidirectional,
-                           dropout=drop_prob if num_layers > 1 else 0.)
+        self.rnn = nn.LSTM(
+            input_size,
+            hidden_size,
+            num_layers,
+            batch_first=True,
+            bidirectional=bidirectional,
+            dropout=drop_prob if num_layers > 1 else 0.0,
+        )
 
     def forward(self, x, lengths, y=None):
         x = self.embedding(x, y)
@@ -60,15 +71,39 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, input_size, hidden_size, word_vectors, n_layers, trg_vocab, device, dropout,
-                 attention=None, min_len_sentence=config.min_len_sentence,
-                 max_len_sentence=config.max_len_question, top_k=config.top_k, top_p=config.top_p,
-                 temperature=config.temperature, decode_type=config.decode_type):
+    def __init__(
+        self,
+        input_size,
+        hidden_size,
+        word_vectors,
+        n_layers,
+        trg_vocab,
+        device,
+        dropout,
+        attention=None,
+        min_len_sentence=config.min_len_sentence,
+        max_len_sentence=config.max_len_question,
+        top_k=config.top_k,
+        top_p=config.top_p,
+        temperature=config.temperature,
+        decode_type=config.decode_type,
+    ):
         super().__init__()
         self.output_dim = len(trg_vocab.itos)
         self.embedding = nn.Embedding.from_pretrained(word_vectors, freeze=True)
-        self.rnn = nn.LSTM(input_size, hidden_size, n_layers, batch_first=True, bidirectional=False, dropout=dropout)
-        self.attn = Attention(hidden_size=hidden_size, attn_type="general") if attention else None
+        self.rnn = nn.LSTM(
+            input_size,
+            hidden_size,
+            n_layers,
+            batch_first=True,
+            bidirectional=False,
+            dropout=dropout,
+        )
+        self.attn = (
+            Attention(hidden_size=hidden_size, attn_type="general")
+            if attention
+            else None
+        )
         self.gen = Generator(decoder_size=hidden_size, output_dim=len(trg_vocab.itos))
         self.dropout = nn.Dropout(dropout)
         self.min_len_sentence = min_len_sentence
@@ -108,7 +143,9 @@ class Decoder(nn.Module):
 
             out = self.gen(dec_output)
 
-            out, probs = sample_sequence(out, self.top_k, self.top_p, self.temperature, False)
+            out, probs = sample_sequence(
+                out, self.top_k, self.top_p, self.temperature, False
+            )
             if t < self.min_len_sentence and out.item() in self.special_tokens_ids:
                 while out.item() in self.special_tokens_ids:
                     out = torch.multinomial(probs, num_samples=1)
@@ -168,7 +205,9 @@ class Decoder(nn.Module):
                 for new_k in range(beam_width):
                     out_t = indexes[0][new_k].view(1, -1)
                     log_p = log_prob[0][new_k].item()
-                    node = BeamSearchNode(dec_hidden, n, out_t, n.logp + log_p, n.leng + 1, dec_output)
+                    node = BeamSearchNode(
+                        dec_hidden, n, out_t, n.logp + log_p, n.leng + 1, dec_output
+                    )
                     score = node.eval()
                     nextnodes.append((score, node))
                 # Push the nodes to the output Beam queue
@@ -194,7 +233,7 @@ class Decoder(nn.Module):
         # Now we unpack the sequences in reverse order to retrieve the sentences
         utterances = []
         for score, n in sorted(endnodes, key=operator.itemgetter(0)):
-            utterance= [n.wordid.item()]
+            utterance = [n.wordid.item()]
             while n.prevnode != None:
                 n = n.prevnode
                 utterance.append(n.wordid.item())
@@ -240,9 +279,25 @@ class Decoder(nn.Module):
         # TODO: we should have a "if bidirectional:" statement here
         if isinstance(enc_hidden, tuple):  # meaning we have a LSTM encoder
             enc_hidden = tuple(
-                (torch.cat((hidden[0:hidden.size(0):2], hidden[1:hidden.size(0):2]), dim=2) for hidden in enc_hidden))
+                (
+                    torch.cat(
+                        (
+                            hidden[0 : hidden.size(0) : 2],
+                            hidden[1 : hidden.size(0) : 2],
+                        ),
+                        dim=2,
+                    )
+                    for hidden in enc_hidden
+                )
+            )
         else:  # GRU layer
-            enc_hidden = torch.cat((enc_hidden[0:enc_hidden.size(0):2], enc_hidden[1:enc_hidden.size(0):2]), dim=2)
+            enc_hidden = torch.cat(
+                (
+                    enc_hidden[0 : enc_hidden.size(0) : 2],
+                    enc_hidden[1 : enc_hidden.size(0) : 2],
+                ),
+                dim=2,
+            )
 
         enc_out = enc_out[:, -1, :].unsqueeze(1) if not self.attn else enc_out
         dec_hidden = enc_hidden
@@ -257,10 +312,11 @@ class Decoder(nn.Module):
 
                 outputs.append(self.gen(dec_output))
                 input_feed = dec_output
-
         else:  # EVALUATION
             if self.decode_type not in ["topk", "beam", "greedy"]:
-                print("The decode_type config value needs to be either topk, beam or greedy.")
+                print(
+                    "The decode_type config value needs to be either topk, beam or greedy."
+                )
                 return outputs
             if self.decode_type == "topk":
                 outputs = self.top_k_top_p_decode(dec_hidden, enc_out)
@@ -288,8 +344,11 @@ class Attention(nn.Module):
         super(Attention, self).__init__()
 
         self.hidden_size = hidden_size
-        assert attn_type in ["dot", "general", "mlp"], (
-            "Please select a valid attention type (got {:s}).".format(attn_type))
+        assert attn_type in [
+            "dot",
+            "general",
+            "mlp",
+        ], "Please select a valid attention type (got {:s}).".format(attn_type)
         self.attn_type = attn_type
 
         if self.attn_type == "general":
@@ -337,7 +396,7 @@ class Attention(nn.Module):
         align = self.score(dec_output, enc_output)
 
         # Softmax to normalize attention weights
-        align_vectors = F.softmax(align.view(batch*target_l, source_l), -1)
+        align_vectors = F.softmax(align.view(batch * target_l, source_l), -1)
         align_vectors = align_vectors.view(batch, target_l, source_l)
 
         # each context vector c_t is the weighted average
@@ -345,7 +404,7 @@ class Attention(nn.Module):
         c = torch.bmm(align_vectors, enc_output)
 
         # concatenate
-        concat_c = torch.cat((c, dec_output), 2).view(batch*target_l, hidden_size*2)
+        concat_c = torch.cat((c, dec_output), 2).view(batch * target_l, hidden_size * 2)
         attn_h = self.linear_out(concat_c).view(batch, target_l, hidden_size)
         if self.attn_type in ["general", "dot"]:
             attn_h = torch.tanh(attn_h)

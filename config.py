@@ -2,16 +2,18 @@
 exp = "qg-1"
 
 # data directories
-newsqa_data_dir = "/Users/gdamien/Data/newsqa/newsqa-data-v1"
-squad_data_dir = "/Users/gdamien/Data/squad/"
-out_dir = "/Users/gdamien/Data/qg/"
+repo_dir = "/content/drive/MyDrive/UC_C/natural_language_processing/question_generation/"
+newsqa_data_dir = repo_dir + "data/newsqa-data-v1"
+squad_data_dir = repo_dir + "data/squad/"
+out_dir = repo_dir + "output/"
 train_dir = squad_data_dir + "train/"
 dev_dir = squad_data_dir + "dev/"
 
 # model paths
-spacy_en = "/Users/gdamien/Data/spacy/en_core_web_sm-2.0.0/en_core_web_sm/en_core_web_sm-2.0.0"
-glove = "/Users/gdamien/Data/glove.6B/"
-squad_models = "/Users/gdamien/Data/squad/models/"
+# spacy_en = "/Users/gdamien/Data/spacy/en_core_web_sm-2.0.0/en_core_web_sm/en_core_web_sm-2.0.0"
+spacy_en = repo_dir + "/data/spacy"
+glove = repo_dir + "/data/glove.6B/"
+squad_models = repo_dir + "/data/squad/models/"
 
 # preprocessing values
 paragraph = False
@@ -43,4 +45,4 @@ min_len_sentence = 5
 top_k = 0.
 top_p = 0.9
 temperature = 0.7
-decode_type = "topk"
+decode_type = "beam"
